@@ -4,12 +4,18 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.room.Room
+import com.example.goodmail.data.local.db.AppDatabase
+import com.example.goodmail.data.local.db.EmailDao
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
+import com.google.api.client.http.javanet.NetHttpTransport
+import com.google.api.client.json.gson.GsonFactory
 import com.google.api.client.util.ExponentialBackOff
+import com.google.api.services.gmail.Gmail
 import com.google.api.services.gmail.GmailScopes
 import dagger.Module
 import dagger.Provides
@@ -54,4 +60,19 @@ object AppModule {
     ): GoogleAccountCredential = GoogleAccountCredential
         .usingOAuth2(context, listOf(GmailScopes.GMAIL_READONLY, GmailScopes.GMAIL_MODIFY))
         .setBackOff(ExponentialBackOff())
+
+    @Provides
+    @Singleton
+    fun provideGmail(credential: GoogleAccountCredential): Gmail =
+        Gmail.Builder(NetHttpTransport(), GsonFactory.getDefaultInstance(), credential)
+            .setApplicationName("Goodmail")
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase =
+        Room.databaseBuilder(context, AppDatabase::class.java, "goodmail.db").build()
+
+    @Provides
+    fun provideEmailDao(database: AppDatabase): EmailDao = database.emailDao()
 }
