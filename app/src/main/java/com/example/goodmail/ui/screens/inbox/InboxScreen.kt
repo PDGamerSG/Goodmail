@@ -1,16 +1,19 @@
 package com.example.goodmail.ui.screens.inbox
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -27,9 +30,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.goodmail.ui.screens.inbox.components.FilterChips
 import com.example.goodmail.ui.screens.inbox.components.SwipeableEmailRow
 import kotlinx.coroutines.launch
 
@@ -37,10 +40,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun InboxScreen(
     onEmailClick: (String) -> Unit,
+    onSettings: () -> Unit,
     onSignedOut: () -> Unit,
     viewModel: InboxViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val filter by viewModel.filter.collectAsStateWithLifecycle()
     val signedOut by viewModel.isSignedOut.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -61,49 +66,57 @@ fun InboxScreen(
             TopAppBar(
                 title = { Text("Goodmail") },
                 actions = {
-                    IconButton(onClick = { viewModel.signOut() }) {
-                        Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Sign out")
+                    IconButton(onClick = onSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
                 },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = state.isRefreshing,
-            onRefresh = viewModel::refresh,
+        Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize(),
         ) {
-            when {
-                state.isInitialLoading -> CenteredProgress()
-                state.emails.isEmpty() -> EmptyInbox()
-                else -> {
-                    val nowMillis = remember(state.emails) { System.currentTimeMillis() }
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(state.emails, key = { it.id }) { email ->
-                            SwipeableEmailRow(
-                                email = email,
-                                nowMillis = nowMillis,
-                                onClick = {
-                                    viewModel.markRead(email.id)
-                                    onEmailClick(email.id)
-                                },
-                                onDelete = {
-                                    viewModel.delete(email.id)
-                                    scope.launch {
-                                        val result = snackbarHostState.showSnackbar(
-                                            message = "Email moved to Trash",
-                                            actionLabel = "Undo",
-                                            duration = SnackbarDuration.Short,
-                                        )
-                                        if (result == SnackbarResult.ActionPerformed) {
-                                            viewModel.undoDelete()
+            FilterChips(selected = filter, onSelect = viewModel::setFilter)
+            if (state.isClassifying) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            PullToRefreshBox(
+                isRefreshing = state.isRefreshing,
+                onRefresh = viewModel::refresh,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                when {
+                    state.isInitialLoading -> CenteredProgress()
+                    state.emails.isEmpty() -> EmptyInbox(filter)
+                    else -> {
+                        val nowMillis = remember(state.emails) { System.currentTimeMillis() }
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            items(state.emails, key = { it.id }) { email ->
+                                SwipeableEmailRow(
+                                    email = email,
+                                    nowMillis = nowMillis,
+                                    onClick = {
+                                        viewModel.markRead(email.id)
+                                        onEmailClick(email.id)
+                                    },
+                                    onDelete = {
+                                        viewModel.delete(email.id)
+                                        scope.launch {
+                                            val result = snackbarHostState.showSnackbar(
+                                                message = "Email moved to Trash",
+                                                actionLabel = "Undo",
+                                                duration = SnackbarDuration.Short,
+                                            )
+                                            if (result == SnackbarResult.ActionPerformed) {
+                                                viewModel.undoDelete()
+                                            }
                                         }
-                                    }
-                                },
-                            )
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -120,13 +133,18 @@ private fun CenteredProgress() {
 }
 
 @Composable
-private fun EmptyInbox() {
+private fun EmptyInbox(filter: InboxFilter) {
+    val message = when (filter) {
+        InboxFilter.ALL -> "Your inbox is empty"
+        InboxFilter.IMPORTANT -> "Nothing urgent right now"
+        InboxFilter.OTHERS -> "Nothing here"
+    }
     // LazyColumn (not a static Box) so the pull-to-refresh gesture still works when empty.
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
             Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    text = "Your inbox is empty",
+                    text = message,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

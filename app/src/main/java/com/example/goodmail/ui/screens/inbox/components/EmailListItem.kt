@@ -25,10 +25,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.goodmail.domain.model.Email
+import com.example.goodmail.domain.model.EmailImportance
 import com.example.goodmail.ui.util.RelativeTime
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,6 +95,8 @@ fun EmailListItem(
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                ImportanceDot(email.importance)
+                Spacer(Modifier.width(6.dp))
                 Text(
                     text = email.from,
                     style = MaterialTheme.typography.titleSmall,
@@ -126,6 +130,21 @@ fun EmailListItem(
             )
         }
     }
+}
+
+@Composable
+private fun ImportanceDot(importance: EmailImportance) {
+    val color = when (importance) {
+        EmailImportance.IMPORTANT -> Color(0xFF34A853)
+        EmailImportance.NOT_IMPORTANT -> MaterialTheme.colorScheme.onSurfaceVariant
+        EmailImportance.UNCLASSIFIED -> Color.Transparent
+    }
+    Box(
+        modifier = Modifier
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(color),
+    )
 }
 
 @Composable

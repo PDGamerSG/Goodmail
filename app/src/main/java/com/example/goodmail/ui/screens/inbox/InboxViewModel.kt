@@ -5,20 +5,26 @@ import androidx.lifecycle.viewModelScope
 import com.example.goodmail.data.repository.AuthRepository
 import com.example.goodmail.data.repository.EmailRepository
 import com.example.goodmail.domain.model.Email
+import com.example.goodmail.domain.model.EmailImportance
+import com.example.goodmail.domain.usecase.ClassifyEmailUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+enum class InboxFilter { ALL, IMPORTANT, OTHERS }
+
 data class InboxUiState(
     val emails: List<Email> = emptyList(),
     val isRefreshing: Boolean = false,
     val isInitialLoading: Boolean = true,
+    val isClassifying: Boolean = false,
     val error: String? = null,
 )
 
@@ -26,22 +32,37 @@ data class InboxUiState(
 class InboxViewModel @Inject constructor(
     private val emailRepository: EmailRepository,
     private val authRepository: AuthRepository,
+    private val classifyEmailUseCase: ClassifyEmailUseCase,
 ) : ViewModel() {
 
     private val refreshing = MutableStateFlow(false)
     private val initialLoading = MutableStateFlow(true)
+    private val classifying = MutableStateFlow(false)
     private val error = MutableStateFlow<String?>(null)
 
+    private val _filter = MutableStateFlow(InboxFilter.ALL)
+    val filter: StateFlow<InboxFilter> = _filter.asStateFlow()
+
+    private val filteredEmails = combine(emailRepository.emails, _filter) { emails, filter ->
+        when (filter) {
+            InboxFilter.ALL -> emails
+            InboxFilter.IMPORTANT -> emails.filter { it.importance == EmailImportance.IMPORTANT }
+            InboxFilter.OTHERS -> emails.filter { it.importance != EmailImportance.IMPORTANT }
+        }
+    }
+
     val uiState: StateFlow<InboxUiState> = combine(
-        emailRepository.emails,
+        filteredEmails,
         refreshing,
         initialLoading,
+        classifying,
         error,
-    ) { emails, isRefreshing, isInitial, err ->
+    ) { emails, isRefreshing, isInitial, isClassifying, err ->
         InboxUiState(
             emails = emails,
             isRefreshing = isRefreshing,
             isInitialLoading = isInitial && emails.isEmpty(),
+            isClassifying = isClassifying,
             error = err,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InboxUiState())
@@ -58,10 +79,24 @@ class InboxViewModel @Inject constructor(
         viewModelScope.launch {
             refreshing.value = true
             error.value = null
-            runCatching { emailRepository.refreshInbox() }
+            val refreshed = runCatching { emailRepository.refreshInbox() }
                 .onFailure { error.value = "Couldn't reach Gmail. Showing cached mail." }
+                .isSuccess
             refreshing.value = false
             initialLoading.value = false
+            if (refreshed) classify()
+        }
+    }
+
+    fun setFilter(filter: InboxFilter) {
+        _filter.value = filter
+    }
+
+    private fun classify() {
+        viewModelScope.launch {
+            classifying.value = true
+            runCatching { classifyEmailUseCase.classifyUnclassified() }
+            classifying.value = false
         }
     }
 
@@ -78,10 +113,6 @@ class InboxViewModel @Inject constructor(
 
     fun markRead(id: String) {
         viewModelScope.launch { emailRepository.markAsRead(id) }
-    }
-
-    fun signOut() {
-        viewModelScope.launch { authRepository.signOut() }
     }
 
     fun dismissError() {
