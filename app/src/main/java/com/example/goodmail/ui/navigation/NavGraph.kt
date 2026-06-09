@@ -1,15 +1,20 @@
 package com.example.goodmail.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.goodmail.ui.screens.auth.AuthScreen
+import com.example.goodmail.ui.screens.detail.EmailDetailScreen
 import com.example.goodmail.ui.screens.inbox.InboxScreen
 
 object Routes {
     const val AUTH = "auth"
     const val INBOX = "inbox"
+    const val DETAIL = "detail"
+    const val ARG_EMAIL_ID = "emailId"
 }
 
 @Composable
@@ -27,12 +32,21 @@ fun GoodmailNavHost() {
         }
         composable(Routes.INBOX) {
             InboxScreen(
+                onEmailClick = { emailId ->
+                    navController.navigate("${Routes.DETAIL}/$emailId")
+                },
                 onSignedOut = {
                     navController.navigate(Routes.AUTH) {
                         popUpTo(Routes.INBOX) { inclusive = true }
                     }
                 },
             )
+        }
+        composable(
+            route = "${Routes.DETAIL}/{${Routes.ARG_EMAIL_ID}}",
+            arguments = listOf(navArgument(Routes.ARG_EMAIL_ID) { type = NavType.StringType }),
+        ) {
+            EmailDetailScreen(onBack = { navController.popBackStack() })
         }
     }
 }

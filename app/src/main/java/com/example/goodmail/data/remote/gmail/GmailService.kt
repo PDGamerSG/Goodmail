@@ -45,6 +45,10 @@ class GmailService @Inject constructor(
         gmail.users().messages().trash(USER, id).execute()
     }
 
+    suspend fun untrash(id: String): Unit = withContext(Dispatchers.IO) {
+        gmail.users().messages().untrash(USER, id).execute()
+    }
+
     suspend fun markRead(id: String): Unit = withContext(Dispatchers.IO) {
         val request = ModifyMessageRequest().setRemoveLabelIds(listOf(UNREAD))
         gmail.users().messages().modify(USER, id, request).execute()

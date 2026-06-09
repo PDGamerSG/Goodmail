@@ -42,6 +42,9 @@ class EmailRepository @Inject constructor(
         return body
     }
 
+    /** The most recently deleted row, kept so the next [undoLastDelete] can restore it. */
+    private var lastDeleted: com.example.goodmail.data.local.db.entities.EmailEntity? = null
+
     /** Optimistically remove locally, then trash on Gmail; restore the row if the call fails. */
     suspend fun deleteEmail(id: String) {
         val backup = emailDao.getById(id)
@@ -50,6 +53,15 @@ class EmailRepository @Inject constructor(
             if (backup != null) emailDao.upsertAll(listOf(backup))
             throw e
         }
+        lastDeleted = backup
+    }
+
+    /** Reverse the most recent [deleteEmail]: untrash on Gmail and re-insert locally. */
+    suspend fun undoLastDelete() {
+        val backup = lastDeleted ?: return
+        runCatching { gmailService.untrash(backup.id) }
+        emailDao.upsertAll(listOf(backup))
+        lastDeleted = null
     }
 
     suspend fun markAsRead(id: String) {
