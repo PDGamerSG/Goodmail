@@ -4,7 +4,12 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.goodmail.data.repository.EmailRepository
+import com.example.goodmail.data.repository.RuleRepository
 import com.example.goodmail.domain.model.Email
+import com.example.goodmail.domain.model.EmailImportance
+import com.example.goodmail.domain.model.ImportanceRule
+import com.example.goodmail.domain.model.RuleType
+import com.example.goodmail.domain.usecase.ClassifyEmailUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,11 +25,14 @@ data class DetailUiState(
     val isLoadingBody: Boolean = true,
     val error: String? = null,
     val deleted: Boolean = false,
+    val message: String? = null,
 )
 
 @HiltViewModel
 class EmailDetailViewModel @Inject constructor(
     private val emailRepository: EmailRepository,
+    private val ruleRepository: RuleRepository,
+    private val classifyEmailUseCase: ClassifyEmailUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -53,5 +61,27 @@ class EmailDetailViewModel @Inject constructor(
                 .onSuccess { _state.update { it.copy(deleted = true) } }
                 .onFailure { _state.update { it.copy(error = "Couldn't delete email") } }
         }
+    }
+
+    /** Quick-add a SENDER rule for this email's sender, then re-evaluate the cache. */
+    fun addSenderRule(action: EmailImportance) {
+        val from = _state.value.email?.from ?: return
+        viewModelScope.launch {
+            ruleRepository.addRule(
+                ImportanceRule(
+                    type = RuleType.SENDER,
+                    value = from,
+                    action = action,
+                    createdAt = System.currentTimeMillis(),
+                ),
+            )
+            classifyEmailUseCase.reapplyRules()
+            val verb = if (action == EmailImportance.IMPORTANT) "important" else "not important"
+            _state.update { it.copy(message = "Mail from $from will be marked $verb") }
+        }
+    }
+
+    fun dismissMessage() {
+        _state.update { it.copy(message = null) }
     }
 }

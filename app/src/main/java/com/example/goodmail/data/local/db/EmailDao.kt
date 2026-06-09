@@ -21,6 +21,9 @@ interface EmailDao {
     @Query("SELECT * FROM emails WHERE importance = 'UNCLASSIFIED' ORDER BY timestamp DESC")
     suspend fun getUnclassified(): List<EmailEntity>
 
+    @Query("SELECT * FROM emails")
+    suspend fun getAllList(): List<EmailEntity>
+
     @Query("UPDATE emails SET importance = :importance WHERE id = :id")
     suspend fun updateImportance(id: String, importance: String)
 

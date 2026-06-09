@@ -9,6 +9,7 @@ import androidx.navigation.navArgument
 import com.example.goodmail.ui.screens.auth.AuthScreen
 import com.example.goodmail.ui.screens.detail.EmailDetailScreen
 import com.example.goodmail.ui.screens.inbox.InboxScreen
+import com.example.goodmail.ui.screens.rules.RulesScreen
 import com.example.goodmail.ui.screens.settings.SettingsScreen
 
 object Routes {
@@ -16,6 +17,7 @@ object Routes {
     const val INBOX = "inbox"
     const val DETAIL = "detail"
     const val SETTINGS = "settings"
+    const val RULES = "rules"
     const val ARG_EMAIL_ID = "emailId"
 }
 
@@ -54,12 +56,16 @@ fun GoodmailNavHost() {
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
+                onRules = { navController.navigate(Routes.RULES) },
                 onSignedOut = {
                     navController.navigate(Routes.AUTH) {
                         popUpTo(Routes.INBOX) { inclusive = true }
                     }
                 },
             )
+        }
+        composable(Routes.RULES) {
+            RulesScreen(onBack = { navController.popBackStack() })
         }
     }
 }

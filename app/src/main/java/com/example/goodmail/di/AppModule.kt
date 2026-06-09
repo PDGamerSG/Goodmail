@@ -7,6 +7,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.example.goodmail.data.local.db.AppDatabase
 import com.example.goodmail.data.local.db.EmailDao
+import com.example.goodmail.data.local.db.RuleDao
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -71,8 +72,14 @@ object AppModule {
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase =
-        Room.databaseBuilder(context, AppDatabase::class.java, "goodmail.db").build()
+        Room.databaseBuilder(context, AppDatabase::class.java, "goodmail.db")
+            // The DB is a disposable cache rebuilt from Gmail, so recreate on schema change.
+            .fallbackToDestructiveMigration(dropAllTables = true)
+            .build()
 
     @Provides
     fun provideEmailDao(database: AppDatabase): EmailDao = database.emailDao()
+
+    @Provides
+    fun provideRuleDao(database: AppDatabase): RuleDao = database.ruleDao()
 }

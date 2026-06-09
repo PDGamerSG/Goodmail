@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onRules: () -> Unit,
     onSignedOut: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -94,6 +95,12 @@ fun SettingsScreen(
             )
             Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth()) {
                 Text("Save")
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            OutlinedButton(onClick = onRules, modifier = Modifier.fillMaxWidth()) {
+                Text("Manage rules")
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
