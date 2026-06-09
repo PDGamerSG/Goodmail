@@ -1,10 +1,14 @@
 package com.example.goodmail.ui.screens.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.ExistingPeriodicWorkPolicy
 import com.example.goodmail.data.local.datastore.SettingsStore
 import com.example.goodmail.data.repository.AuthRepository
+import com.example.goodmail.worker.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +21,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val settingsStore: SettingsStore,
     private val authRepository: AuthRepository,
 ) : ViewModel() {
@@ -29,6 +34,12 @@ class SettingsViewModel @Inject constructor(
 
     private val _saved = MutableStateFlow(false)
     val saved: StateFlow<Boolean> = _saved.asStateFlow()
+
+    val syncMinutes: StateFlow<Int> = settingsStore.syncMinutes
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsStore.DEFAULT_SYNC_MINUTES)
+
+    val notificationsEnabled: StateFlow<Boolean> = settingsStore.notificationsEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
     val isSignedOut: StateFlow<Boolean> = authRepository.accountEmail
         .map { it == null }
@@ -59,7 +70,21 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setSyncMinutes(minutes: Int) {
+        viewModelScope.launch {
+            settingsStore.setSyncMinutes(minutes)
+            SyncScheduler.schedule(context, minutes.toLong(), ExistingPeriodicWorkPolicy.UPDATE)
+        }
+    }
+
+    fun setNotificationsEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setNotificationsEnabled(enabled) }
+    }
+
     fun signOut() {
-        viewModelScope.launch { authRepository.signOut() }
+        viewModelScope.launch {
+            authRepository.signOut()
+            SyncScheduler.cancel(context)
+        }
     }
 }

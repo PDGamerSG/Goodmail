@@ -6,6 +6,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import com.example.goodmail.ui.screens.auth.AuthScreen
 import com.example.goodmail.ui.screens.detail.EmailDetailScreen
 import com.example.goodmail.ui.screens.inbox.InboxScreen
@@ -50,6 +51,7 @@ fun GoodmailNavHost() {
         composable(
             route = "${Routes.DETAIL}/{${Routes.ARG_EMAIL_ID}}",
             arguments = listOf(navArgument(Routes.ARG_EMAIL_ID) { type = NavType.StringType }),
+            deepLinks = listOf(navDeepLink { uriPattern = "goodmail://email/{${Routes.ARG_EMAIL_ID}}" }),
         ) {
             EmailDetailScreen(onBack = { navController.popBackStack() })
         }
