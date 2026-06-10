@@ -25,6 +25,7 @@ data class InboxUiState(
     val isRefreshing: Boolean = false,
     val isInitialLoading: Boolean = true,
     val isClassifying: Boolean = false,
+    val isLoadingMore: Boolean = false,
     val error: String? = null,
 )
 
@@ -38,7 +39,11 @@ class InboxViewModel @Inject constructor(
     private val refreshing = MutableStateFlow(false)
     private val initialLoading = MutableStateFlow(true)
     private val classifying = MutableStateFlow(false)
+    private val loadingMore = MutableStateFlow(false)
     private val error = MutableStateFlow<String?>(null)
+
+    /** Whether Gmail still has older pages; reset on every refresh. */
+    private var hasMore = true
 
     private val _filter = MutableStateFlow(InboxFilter.ALL)
     val filter: StateFlow<InboxFilter> = _filter.asStateFlow()
@@ -56,14 +61,18 @@ class InboxViewModel @Inject constructor(
         refreshing,
         initialLoading,
         classifying,
+        loadingMore,
         error,
-    ) { emails, isRefreshing, isInitial, isClassifying, err ->
+    ) { values ->
+        @Suppress("UNCHECKED_CAST")
+        val emails = values[0] as List<Email>
         InboxUiState(
             emails = emails,
-            isRefreshing = isRefreshing,
-            isInitialLoading = isInitial && emails.isEmpty(),
-            isClassifying = isClassifying,
-            error = err,
+            isRefreshing = values[1] as Boolean,
+            isInitialLoading = values[2] as Boolean && emails.isEmpty(),
+            isClassifying = values[3] as Boolean,
+            isLoadingMore = values[4] as Boolean,
+            error = values[5] as String?,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InboxUiState())
 
@@ -84,7 +93,25 @@ class InboxViewModel @Inject constructor(
                 .isSuccess
             refreshing.value = false
             initialLoading.value = false
-            if (refreshed) classify()
+            if (refreshed) {
+                hasMore = true
+                classify()
+            }
+        }
+    }
+
+    /** Fetch the next (older) page when the user scrolls near the bottom. */
+    fun loadMore() {
+        if (loadingMore.value || refreshing.value || !hasMore) return
+        viewModelScope.launch {
+            loadingMore.value = true
+            runCatching { emailRepository.loadMore() }
+                .onSuccess { more ->
+                    hasMore = more
+                    classify()
+                }
+                .onFailure { error.value = "Couldn't load more emails" }
+            loadingMore.value = false
         }
     }
 

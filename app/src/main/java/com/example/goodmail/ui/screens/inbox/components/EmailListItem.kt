@@ -40,6 +40,7 @@ fun SwipeableEmailRow(
     nowMillis: Long,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
@@ -53,6 +54,7 @@ fun SwipeableEmailRow(
     )
     SwipeToDismissBox(
         state = dismissState,
+        modifier = modifier,
         enableDismissFromStartToEnd = false,
         backgroundContent = {
             Box(

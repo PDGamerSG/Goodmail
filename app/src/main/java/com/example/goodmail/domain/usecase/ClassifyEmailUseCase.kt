@@ -25,19 +25,24 @@ class ClassifyEmailUseCase @Inject constructor(
 ) {
     suspend fun classifyUnclassified() {
         val hasKey = !settingsStore.apiKey.first().isNullOrBlank()
-        for (entity in emailDao.getUnclassified()) {
-            val email = entity.toDomain()
-            val byRule = ruleRepository.matchRule(email)
-            val importance = when {
-                byRule != null -> byRule
-                hasKey -> groqClassifier.classify(email)
-                else -> EmailImportance.UNCLASSIFIED
+        // First apply user rules (works without an API key); collect the rest for Groq.
+        val needsApi = buildList {
+            for (entity in emailDao.getUnclassified()) {
+                val byRule = ruleRepository.matchRule(entity.toDomain())
+                if (byRule != null) emailDao.updateImportance(entity.id, byRule.name) else add(entity)
             }
-            if (importance != EmailImportance.UNCLASSIFIED) {
-                emailDao.updateImportance(entity.id, importance.name)
+        }
+        if (!hasKey) return
+        // Classify the remainder in small batches to minimise API calls.
+        for (chunk in needsApi.chunked(BATCH_SIZE)) {
+            val verdicts = groqClassifier.classifyBatch(chunk.map { it.toDomain() })
+            for (entity in chunk) {
+                val importance = verdicts[entity.id] ?: continue
+                if (importance != EmailImportance.UNCLASSIFIED) {
+                    emailDao.updateImportance(entity.id, importance.name)
+                }
             }
-            // Only throttle when we actually hit the API.
-            if (byRule == null && hasKey) delay(RATE_LIMIT_DELAY_MS)
+            delay(RATE_LIMIT_DELAY_MS)
         }
     }
 
@@ -53,5 +58,6 @@ class ClassifyEmailUseCase @Inject constructor(
 
     private companion object {
         const val RATE_LIMIT_DELAY_MS = 250L
+        const val BATCH_SIZE = 5
     }
 }

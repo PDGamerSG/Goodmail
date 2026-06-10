@@ -21,9 +21,27 @@ class EmailRepository @Inject constructor(
 ) {
     val emails: Flow<List<Email>> = emailDao.getAllFlow().map { list -> list.map { it.toDomain() } }
 
-    /** Fetch the latest inbox metadata and upsert it, preserving any cached body/importance. */
+    /** Page token for the next (older) page; null when the inbox is fully loaded. */
+    private var nextPageToken: String? = null
+
+    /** Fetch the newest page of inbox metadata and upsert it, resetting pagination. */
     suspend fun refreshInbox() {
-        val fetched = gmailService.fetchInbox()
+        val page = gmailService.fetchInbox(PAGE_SIZE)
+        upsertPreservingLocal(page.emails)
+        nextPageToken = page.nextPageToken
+    }
+
+    /** Fetch the next (older) page. Returns true while more pages remain after this one. */
+    suspend fun loadMore(): Boolean {
+        val token = nextPageToken ?: return false
+        val page = gmailService.fetchInbox(PAGE_SIZE, token)
+        upsertPreservingLocal(page.emails)
+        nextPageToken = page.nextPageToken
+        return nextPageToken != null
+    }
+
+    /** Upsert fetched metadata, preserving any cached body/importance. */
+    private suspend fun upsertPreservingLocal(fetched: List<Email>) {
         val entities = fetched.map { email ->
             val existing = emailDao.getById(email.id)
             email.copy(
@@ -67,5 +85,9 @@ class EmailRepository @Inject constructor(
     suspend fun markAsRead(id: String) {
         emailDao.markRead(id)
         runCatching { gmailService.markRead(id) }
+    }
+
+    private companion object {
+        const val PAGE_SIZE = 20L
     }
 }

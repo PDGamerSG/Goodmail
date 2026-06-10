@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,12 +33,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.goodmail.ui.screens.inbox.components.FilterChips
+import com.example.goodmail.ui.screens.inbox.components.ShimmerInbox
 import com.example.goodmail.ui.screens.inbox.components.SwipeableEmailRow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -101,11 +107,23 @@ fun InboxScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 when {
-                    state.isInitialLoading -> CenteredProgress()
+                    state.isInitialLoading -> ShimmerInbox()
                     state.emails.isEmpty() -> EmptyInbox(filter)
                     else -> {
                         val nowMillis = remember(state.emails) { System.currentTimeMillis() }
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        val listState = rememberLazyListState()
+                        // Ask for the next (older) page when the user scrolls near the bottom.
+                        LaunchedEffect(listState) {
+                            snapshotFlow {
+                                val info = listState.layoutInfo
+                                val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+                                info.totalItemsCount > 0 &&
+                                    lastVisible >= info.totalItemsCount - LOAD_MORE_THRESHOLD
+                            }
+                                .distinctUntilChanged()
+                                .collect { nearEnd -> if (nearEnd) viewModel.loadMore() }
+                        }
+                        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                             items(state.emails, key = { it.id }) { email ->
                                 SwipeableEmailRow(
                                     email = email,
@@ -127,7 +145,20 @@ fun InboxScreen(
                                             }
                                         }
                                     },
+                                    modifier = Modifier.animateItem(),
                                 )
+                            }
+                            if (state.isLoadingMore) {
+                                item(key = "loading_more") {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    }
+                                }
                             }
                         }
                     }
@@ -137,12 +168,8 @@ fun InboxScreen(
     }
 }
 
-@Composable
-private fun CenteredProgress() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
-    }
-}
+/** Start loading the next page once the user is within this many rows of the end. */
+private const val LOAD_MORE_THRESHOLD = 5
 
 @Composable
 private fun EmptyInbox(filter: InboxFilter) {

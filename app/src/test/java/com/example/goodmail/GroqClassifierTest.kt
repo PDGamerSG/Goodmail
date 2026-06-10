@@ -50,6 +50,49 @@ class GroqClassifierTest {
     }
 
     @Test
+    fun parseBatch_cleanJson() {
+        val content = """{"results":[{"index":1,"importance":"IMPORTANT"},{"index":2,"importance":"NOT_IMPORTANT"}]}"""
+        val parsed = GroqClassifier.parseBatch(content)
+        assertEquals(EmailImportance.IMPORTANT, parsed[1])
+        assertEquals(EmailImportance.NOT_IMPORTANT, parsed[2])
+    }
+
+    @Test
+    fun parseBatch_markdownFenceAndProse() {
+        val content = "Sure!\n```json\n{\"results\":[{\"index\":1,\"importance\":\"not_important\"}]}\n```"
+        assertEquals(mapOf(1 to EmailImportance.NOT_IMPORTANT), GroqClassifier.parseBatch(content))
+    }
+
+    @Test
+    fun parseBatch_skipsBadEntries() {
+        val content = """{"results":[{"index":0,"importance":"IMPORTANT"},{"index":2,"importance":"MAYBE"},{"index":3,"importance":"IMPORTANT"}]}"""
+        assertEquals(mapOf(3 to EmailImportance.IMPORTANT), GroqClassifier.parseBatch(content))
+    }
+
+    @Test
+    fun parseBatch_garbageReturnsEmpty() {
+        assertEquals(emptyMap<Int, EmailImportance>(), GroqClassifier.parseBatch("no json here"))
+    }
+
+    @Test
+    fun buildBatchPrompt_numbersEveryEmail() {
+        val emails = listOf(
+            Email(
+                id = "a", threadId = "a", from = "Alice", subject = "Hi", snippet = "first",
+                body = null, timestamp = 0L, isRead = false, labelIds = emptyList(),
+            ),
+            Email(
+                id = "b", threadId = "b", from = "Bob", subject = "Sale", snippet = "second",
+                body = null, timestamp = 0L, isRead = false, labelIds = emptyList(),
+            ),
+        )
+        val prompt = GroqClassifier.buildBatchPrompt(emails)
+        assertTrue(prompt.contains("1. From: Alice"))
+        assertTrue(prompt.contains("2. From: Bob"))
+        assertTrue(prompt.contains("Subject: Sale"))
+    }
+
+    @Test
     fun buildUserPrompt_includesSenderSubjectPreview() {
         val email = Email(
             id = "1", threadId = "1", from = "Prof Smith", subject = "Exam Monday",

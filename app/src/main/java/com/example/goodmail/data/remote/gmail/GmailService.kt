@@ -10,6 +10,9 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** One page of inbox results; [nextPageToken] is null when there are no older messages. */
+data class InboxPage(val emails: List<Email>, val nextPageToken: String?)
+
 /**
  * Thin coroutine wrapper over the blocking Gmail Java client. All network calls run on
  * [Dispatchers.IO]. The list fetch pulls metadata only; full bodies load lazily via [fetchBody].
@@ -18,15 +21,17 @@ import javax.inject.Singleton
 class GmailService @Inject constructor(
     private val gmail: Gmail,
 ) {
-    /** Fetch the most recent INBOX messages as metadata-only [Email]s (no body). */
-    suspend fun fetchInbox(maxResults: Long = 50): List<Email> = withContext(Dispatchers.IO) {
-        val response = gmail.users().messages().list(USER)
-            .setLabelIds(listOf(INBOX))
-            .setMaxResults(maxResults)
-            .execute()
-        val refs = response.messages ?: return@withContext emptyList()
-        refs.map { ref -> fetchMetadata(ref.id) }
-    }
+    /** Fetch one page of INBOX messages as metadata-only [Email]s (no body), newest first. */
+    suspend fun fetchInbox(maxResults: Long = 20, pageToken: String? = null): InboxPage =
+        withContext(Dispatchers.IO) {
+            val response = gmail.users().messages().list(USER)
+                .setLabelIds(listOf(INBOX))
+                .setMaxResults(maxResults)
+                .apply { pageToken?.let { setPageToken(it) } }
+                .execute()
+            val refs = response.messages ?: return@withContext InboxPage(emptyList(), null)
+            InboxPage(refs.map { ref -> fetchMetadata(ref.id) }, response.nextPageToken)
+        }
 
     private fun fetchMetadata(id: String): Email {
         val message = gmail.users().messages().get(USER, id)
