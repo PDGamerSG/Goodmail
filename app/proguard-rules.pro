@@ -1,21 +1,36 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Goodmail R8 rules. Compose, Room, Hilt, OkHttp, and Retrofit ship their own
+# consumer rules; only reflection the libraries can't declare is listed here.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Keep crash stack traces readable after obfuscation.
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# --- kotlinx.serialization ---------------------------------------------------
+# Serializers are looked up reflectively via the generated Companion/serializer().
+-keepattributes RuntimeVisibleAnnotations,AnnotationDefault
+-keepclassmembers class com.example.goodmail.** {
+    *** Companion;
+}
+-keepclasseswithmembers class com.example.goodmail.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keep,includedescriptorclasses class com.example.goodmail.**$$serializer { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# --- Retrofit ----------------------------------------------------------------
+# Keep generic signatures so suspend functions and Response<T> resolve at runtime.
+-keepattributes Signature,Exceptions
+-keepclassmembers,allowshrinking,allowobfuscation interface com.example.goodmail.** {
+    @retrofit2.http.* <methods>;
+}
+-dontwarn javax.annotation.**
+
+# --- Google API client / Gmail -----------------------------------------------
+# The HTTP client populates model classes reflectively via @Key fields.
+-keepclassmembers class * {
+    @com.google.api.client.util.Key <fields>;
+}
+-keep class com.google.api.services.gmail.model.** { *; }
+-dontwarn com.google.api.client.**
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn org.apache.http.**
+-dontwarn javax.naming.**

@@ -1,5 +1,6 @@
 package com.example.goodmail.di
 
+import com.example.goodmail.BuildConfig
 import com.example.goodmail.data.remote.groq.GroqApiService
 import dagger.Module
 import dagger.Provides
@@ -31,7 +32,16 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
         // BASIC = request/response lines only — never logs email content or the API key body.
-        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
+        // Debug builds only; release stays silent.
+        .addInterceptor(
+            HttpLoggingInterceptor().apply {
+                level = if (BuildConfig.DEBUG) {
+                    HttpLoggingInterceptor.Level.BASIC
+                } else {
+                    HttpLoggingInterceptor.Level.NONE
+                }
+            },
+        )
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
