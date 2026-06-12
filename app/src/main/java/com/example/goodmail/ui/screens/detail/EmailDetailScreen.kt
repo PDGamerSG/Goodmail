@@ -33,7 +33,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -145,8 +144,6 @@ fun EmailDetailScreen(
 
                 else -> EmailBodyWebView(
                     html = state.body?.takeIf { it.isNotBlank() } ?: state.email?.snippet.orEmpty(),
-                    background = MaterialTheme.colorScheme.background,
-                    foreground = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -158,8 +155,6 @@ fun EmailDetailScreen(
 @Composable
 private fun EmailBodyWebView(
     html: String,
-    background: Color,
-    foreground: Color,
     modifier: Modifier = Modifier,
 ) {
     AndroidView(
@@ -169,26 +164,30 @@ private fun EmailBodyWebView(
                 settings.javaScriptEnabled = false
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
-                setBackgroundColor(AndroidColor.TRANSPARENT)
+                setBackgroundColor(AndroidColor.WHITE)
             }
         },
         update = { webView ->
-            val document = wrapHtml(html, background.toCssHex(), foreground.toCssHex())
-            webView.loadDataWithBaseURL(null, document, "text/html", "UTF-8", null)
+            webView.loadDataWithBaseURL(null, wrapHtml(html), "text/html", "UTF-8", null)
         },
     )
 }
 
-private fun wrapHtml(body: String, backgroundCss: String, foregroundCss: String): String = """
+/**
+ * Email HTML is authored against a white background; senders set explicit dark text colors
+ * without declaring a background. Forcing the app's dark background underneath made that text
+ * invisible, so the body always renders on a fixed light surface (as Gmail does).
+ */
+private fun wrapHtml(body: String): String = """
     <!DOCTYPE html>
     <html>
     <head>
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
-        html, body { margin: 0; padding: 12px; background: $backgroundCss; color: $foregroundCss;
+        html, body { margin: 0; padding: 12px; background: #FFFFFF; color: #1F1F1F;
           font-family: sans-serif; font-size: 15px; line-height: 1.5; word-wrap: break-word; }
         img { max-width: 100%; height: auto; }
-        a { color: #8AB4F8; }
+        a { color: #1A73E8; }
         table { max-width: 100%; }
         * { max-width: 100%; box-sizing: border-box; }
       </style>
@@ -196,10 +195,3 @@ private fun wrapHtml(body: String, backgroundCss: String, foregroundCss: String)
     <body>$body</body>
     </html>
 """.trimIndent()
-
-private fun Color.toCssHex(): String {
-    val r = (red * 255).toInt()
-    val g = (green * 255).toInt()
-    val b = (blue * 255).toInt()
-    return "#%02X%02X%02X".format(r, g, b)
-}
