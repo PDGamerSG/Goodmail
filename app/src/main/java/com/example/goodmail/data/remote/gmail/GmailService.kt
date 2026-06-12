@@ -2,8 +2,10 @@ package com.example.goodmail.data.remote.gmail
 
 import com.example.goodmail.domain.model.Email
 import com.example.goodmail.domain.model.EmailImportance
+import com.google.api.client.util.Base64
 import com.google.api.services.gmail.Gmail
 import com.google.api.services.gmail.model.Message
+import com.google.api.services.gmail.model.MessagePart
 import com.google.api.services.gmail.model.ModifyMessageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -43,7 +45,38 @@ class GmailService @Inject constructor(
 
     suspend fun fetchBody(id: String): String = withContext(Dispatchers.IO) {
         val message = gmail.users().messages().get(USER, id).setFormat("full").execute()
-        GmailParsing.extractBody(message.payload)
+        val html = GmailParsing.extractBody(message.payload)
+        resolveInlineImages(id, message.payload, html)
+    }
+
+    /**
+     * Replace `cid:` image references with base64 `data:` URIs so inline images render in the
+     * WebView. Per-image and total size caps keep the cached body well under SQLite's ~2MB
+     * CursorWindow row limit; oversized images are left as broken refs rather than crashing reads.
+     */
+    private fun resolveInlineImages(messageId: String, payload: MessagePart?, html: String): String {
+        val referenced = GmailParsing.referencedCids(html)
+        if (referenced.isEmpty()) return html
+        val inlineParts = GmailParsing.collectInlineImages(payload)
+        var budget = MAX_TOTAL_INLINE_CHARS
+        val dataUris = mutableMapOf<String, String>()
+        for (cid in referenced) {
+            val part = inlineParts[cid] ?: continue
+            val bytes = part.body?.decodeData()
+                ?: part.body?.attachmentId?.let { attachmentId ->
+                    runCatching {
+                        gmail.users().messages().attachments()
+                            .get(USER, messageId, attachmentId).execute().decodeData()
+                    }.getOrNull()
+                }
+                ?: continue
+            if (bytes.size > MAX_INLINE_IMAGE_BYTES) continue
+            val uri = "data:${part.mimeType};base64,${Base64.encodeBase64String(bytes)}"
+            if (uri.length > budget) continue
+            budget -= uri.length
+            dataUris[cid] = uri
+        }
+        return GmailParsing.inlineCidImages(html, dataUris)
     }
 
     suspend fun trash(id: String): Unit = withContext(Dispatchers.IO) {
@@ -81,5 +114,11 @@ class GmailService @Inject constructor(
         const val USER = "me"
         const val INBOX = "INBOX"
         const val UNREAD = "UNREAD"
+
+        /** Skip inline images larger than this (decoded bytes). */
+        const val MAX_INLINE_IMAGE_BYTES = 700_000
+
+        /** Stop inlining once the data URIs would add this many characters to the body. */
+        const val MAX_TOTAL_INLINE_CHARS = 1_400_000
     }
 }

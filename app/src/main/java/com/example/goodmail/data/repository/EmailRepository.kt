@@ -3,6 +3,7 @@ package com.example.goodmail.data.repository
 import com.example.goodmail.data.local.db.EmailDao
 import com.example.goodmail.data.local.db.entities.toDomain
 import com.example.goodmail.data.local.db.entities.toEntity
+import com.example.goodmail.data.remote.gmail.GmailParsing
 import com.example.goodmail.data.remote.gmail.GmailService
 import com.example.goodmail.domain.model.Email
 import com.example.goodmail.domain.model.EmailImportance
@@ -54,7 +55,9 @@ class EmailRepository @Inject constructor(
 
     /** Return the cached body, fetching and caching it from Gmail on first access. */
     suspend fun loadBody(id: String): String {
-        emailDao.getBody(id)?.takeIf { it.isNotEmpty() }?.let { return it }
+        val cached = emailDao.getBody(id)?.takeIf { it.isNotEmpty() }
+        // Bodies cached before inline-image support still hold unresolved cid: refs — refetch those.
+        if (cached != null && GmailParsing.referencedCids(cached).isEmpty()) return cached
         val body = gmailService.fetchBody(id)
         emailDao.updateBody(id, body)
         return body

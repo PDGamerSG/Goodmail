@@ -41,4 +41,43 @@ object GmailParsing {
         }
         return null
     }
+
+    /**
+     * Walk the MIME tree and collect image parts that carry a `Content-ID` header,
+     * keyed by the Content-ID value with the surrounding angle brackets stripped.
+     * These are the inline images that HTML bodies reference via `src="cid:..."`.
+     */
+    fun collectInlineImages(payload: MessagePart?): Map<String, MessagePart> {
+        if (payload == null) return emptyMap()
+        val found = mutableMapOf<String, MessagePart>()
+        collectInlineImagesInto(payload, found)
+        return found
+    }
+
+    private fun collectInlineImagesInto(part: MessagePart, into: MutableMap<String, MessagePart>) {
+        if (part.mimeType?.startsWith("image/") == true) {
+            val contentId = part.headers
+                ?.firstOrNull { it.name.equals("Content-ID", ignoreCase = true) }
+                ?.value?.trim()?.removeSurrounding("<", ">")
+            if (!contentId.isNullOrEmpty()) into.putIfAbsent(contentId, part)
+        }
+        part.parts?.forEach { collectInlineImagesInto(it, into) }
+    }
+
+    private val CID_SRC = Regex("""src\s*=\s*(["'])cid:([^"']+)\1""", RegexOption.IGNORE_CASE)
+
+    /** Content-IDs referenced by `<img src="cid:...">` in [html]. */
+    fun referencedCids(html: String): Set<String> =
+        CID_SRC.findAll(html).map { it.groupValues[2] }.toSet()
+
+    /** Replace `src="cid:X"` references with [dataUris]`[X]`; unknown cids are left untouched. */
+    fun inlineCidImages(html: String, dataUris: Map<String, String>): String {
+        if (dataUris.isEmpty()) return html
+        return CID_SRC.replace(html) { match ->
+            val quote = match.groupValues[1]
+            val cid = match.groupValues[2]
+            val uri = dataUris[cid] ?: return@replace match.value
+            "src=$quote$uri$quote"
+        }
+    }
 }
