@@ -85,6 +85,23 @@ class EmailRepository @Inject constructor(
         lastDeleted = null
     }
 
+    /** Previous importance of the email last changed via [setImportance], for undo. */
+    private var lastImportanceChange: Pair<String, EmailImportance>? = null
+
+    /** Set [id]'s importance locally, remembering the prior value for [undoLastImportanceChange]. */
+    suspend fun setImportance(id: String, importance: EmailImportance) {
+        val previous = emailDao.getById(id)?.toDomain()?.importance ?: EmailImportance.UNCLASSIFIED
+        emailDao.updateImportance(id, importance.name)
+        lastImportanceChange = id to previous
+    }
+
+    /** Reverse the most recent [setImportance]; safe to call when there is nothing to undo. */
+    suspend fun undoLastImportanceChange() {
+        val (id, previous) = lastImportanceChange ?: return
+        emailDao.updateImportance(id, previous.name)
+        lastImportanceChange = null
+    }
+
     suspend fun markAsRead(id: String) {
         emailDao.markRead(id)
         runCatching { gmailService.markRead(id) }

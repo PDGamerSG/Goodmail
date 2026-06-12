@@ -138,6 +138,17 @@ class InboxViewModel @Inject constructor(
         viewModelScope.launch { emailRepository.undoLastDelete() }
     }
 
+    fun markImportant(id: String) {
+        viewModelScope.launch {
+            runCatching { emailRepository.setImportance(id, EmailImportance.IMPORTANT) }
+                .onFailure { error.value = "Couldn't mark as important" }
+        }
+    }
+
+    fun undoMarkImportant() {
+        viewModelScope.launch { emailRepository.undoLastImportanceChange() }
+    }
+
     fun markRead(id: String) {
         viewModelScope.launch { emailRepository.markAsRead(id) }
     }

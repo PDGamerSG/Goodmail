@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.goodmail.domain.model.EmailImportance
 import com.example.goodmail.ui.screens.inbox.components.FilterChips
 import com.example.goodmail.ui.screens.inbox.components.ShimmerInbox
 import com.example.goodmail.ui.screens.inbox.components.SwipeableEmailRow
@@ -142,6 +143,21 @@ fun InboxScreen(
                                             )
                                             if (result == SnackbarResult.ActionPerformed) {
                                                 viewModel.undoDelete()
+                                            }
+                                        }
+                                    },
+                                    onMarkImportant = {
+                                        if (email.importance != EmailImportance.IMPORTANT) {
+                                            viewModel.markImportant(email.id)
+                                            scope.launch {
+                                                val result = snackbarHostState.showSnackbar(
+                                                    message = "Marked as important",
+                                                    actionLabel = "Undo",
+                                                    duration = SnackbarDuration.Short,
+                                                )
+                                                if (result == SnackbarResult.ActionPerformed) {
+                                                    viewModel.undoMarkImportant()
+                                                }
                                             }
                                         }
                                     },

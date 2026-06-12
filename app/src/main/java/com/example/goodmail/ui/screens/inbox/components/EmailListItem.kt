@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,41 +41,66 @@ fun SwipeableEmailRow(
     nowMillis: Long,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onMarkImportant: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.EndToStart) {
-                onDelete()
-                true
-            } else {
-                false
+            when (value) {
+                SwipeToDismissBoxValue.EndToStart -> {
+                    onDelete()
+                    true
+                }
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    // Mark important but return false so the row snaps back instead of dismissing.
+                    onMarkImportant()
+                    false
+                }
+                else -> false
             }
         },
     )
     SwipeToDismissBox(
         state = dismissState,
         modifier = modifier,
-        enableDismissFromStartToEnd = false,
         backgroundContent = {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.errorContainer)
-                    .padding(horizontal = 24.dp),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.onErrorContainer,
-                )
+            if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(ImportantGreen)
+                        .padding(horizontal = 24.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = "Mark important",
+                        tint = Color.White,
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.errorContainer)
+                        .padding(horizontal = 24.dp),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
             }
         },
     ) {
         EmailListItem(email = email, nowMillis = nowMillis, onClick = onClick)
     }
 }
+
+/** Green used for both the importance dot and the swipe-to-mark-important background. */
+private val ImportantGreen = Color(0xFF34A853)
 
 @Composable
 fun EmailListItem(
@@ -137,7 +163,7 @@ fun EmailListItem(
 @Composable
 private fun ImportanceDot(importance: EmailImportance) {
     val color = when (importance) {
-        EmailImportance.IMPORTANT -> Color(0xFF34A853)
+        EmailImportance.IMPORTANT -> ImportantGreen
         EmailImportance.NOT_IMPORTANT -> MaterialTheme.colorScheme.onSurfaceVariant
         EmailImportance.UNCLASSIFIED -> Color.Transparent
     }
